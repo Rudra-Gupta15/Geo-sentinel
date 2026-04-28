@@ -18,6 +18,7 @@ let historyEvents = [];
 let allNews = [];
 let playInterval = null;
 let predictLat = 20.5937, predictLon = 78.9629;
+let selectedCountry = 'India';
 
 const HAZARD_ICONS = {
   fire:'🔥', flood:'🌊', earthquake:'🏔️', cyclone:'🌀',
@@ -84,6 +85,13 @@ function toggleMapStyle() {
 // ════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
+  
+  // Set default to India
+  document.getElementById('continentSelect').value = 'Asia';
+  onContinentChange();
+  document.getElementById('countrySelect').value = 'India';
+  onCountryChange(true); // pass true to avoid flying on init if preferred, or just let it fly
+  
   setupFilterBtns();
   refreshAll();
   setInterval(refreshAll, 5 * 60 * 1000); // auto-refresh every 5 min
@@ -175,6 +183,8 @@ async function loadFires() {
   markerLayers['fire'].clearLayers();
   fires.forEach(f => {
     if (!activeFilters.has('fire')) return;
+    // We can't easily filter FIRMS by country string natively, but we can rely on bbox.
+    // If the backend returned country, we would filter here.
     const size = f.frp > 50 ? 32 : f.frp > 20 ? 26 : 20;
     const icon = L.divIcon({
       className: '', iconSize: [size, size], iconAnchor: [size/2, size/2],
@@ -209,6 +219,9 @@ async function loadDisasters() {
   });
 
   disasters.forEach(d => {
+    // Filter by selected country
+    if (selectedCountry && d.country && d.country.toLowerCase() !== selectedCountry.toLowerCase() && d.country !== 'Unknown') return;
+
     const htype = d.type || 'general';
     const layer = markerLayers[htype] || markerLayers['general'];
     if (!layer) return;
@@ -288,21 +301,34 @@ async function analyzeIndia() {
   btn.textContent = '⏳ Analyzing…'; btn.disabled = true;
   try {
     const days = document.getElementById('daysSlider').value;
-    const res = await fetch(`${API}/analysis/india?days=${days}`);
-    const data = await res.json();
+    
+    let data;
+    if (selectedCountry.toLowerCase() === 'india') {
+      const res = await fetch(`${API}/analysis/india?days=${days}`);
+      data = await res.json();
+      flyTo(20.5937, 78.9629, 5);
+    } else {
+      const radius = document.getElementById('radiusSlider').value;
+      const res = await fetch(`${API}/analysis/`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ lat: predictLat, lon: predictLon, radius_km: parseFloat(radius), days: parseInt(days), region_name: selectedCountry })
+      });
+      data = await res.json();
+    }
+    
     currentContext = data;
     const insight = data.llm_insight || 'Analysis complete.';
     document.getElementById('insightText').textContent = insight;
     const it2 = document.getElementById('insightText2');
     if (it2) it2.textContent = insight;
-    flyTo(20.5937, 78.9629, 5);
   } catch(e) {
     const msg = '⚠️ Analysis failed. Check backend connection.';
     document.getElementById('insightText').textContent = msg;
     const it2 = document.getElementById('insightText2');
     if (it2) it2.textContent = msg;
   }
-  btn.textContent = '🛰️ Analyze India'; btn.disabled = false;
+  btn.textContent = `🛰️ Analyze ${selectedCountry || 'Region'}`; btn.disabled = false;
 }
 
 async function analyzePoint(lat, lon) {
@@ -468,6 +494,7 @@ function renderHistoryList(events) {
 function renderHistoryMarkers(events) {
   Object.values(markerLayers).forEach(l => l.clearLayers());
   events.forEach(e => {
+    if (selectedCountry && e.country && e.country.toLowerCase() !== selectedCountry.toLowerCase() && e.country !== 'Unknown') return;
     const htype = e.type || 'general';
     const layer = markerLayers[htype];
     if (!layer || !activeFilters.has(htype)) return;
@@ -709,6 +736,9 @@ function frpToColor(frp) {
 async function loadHeatwaveGrid() {
   if (!activeFilters.has('heatwave')) return;
   if (heatGridLayer) { map.removeLayer(heatGridLayer); heatGridLayer = null; }
+  
+  // Heatwave grid is currently hardcoded for India, so only show it for India
+  if (selectedCountry && selectedCountry.toLowerCase() !== 'india') return;
 
   heatGridLayer = L.layerGroup().addTo(map);
   const pts = [];
@@ -735,21 +765,21 @@ async function loadHeatwaveGrid() {
     L.circle([lat, lon], {
       radius: radKm * 2,
       color: 'transparent', fillColor: color,
-      fillOpacity: 0.18, interactive: false
+      fillOpacity: 0.08, interactive: false
     }).addTo(heatGridLayer);
 
     // Mid ring
     L.circle([lat, lon], {
       radius: radKm,
       color: 'transparent', fillColor: color,
-      fillOpacity: 0.30, interactive: false
+      fillOpacity: 0.15, interactive: false
     }).addTo(heatGridLayer);
 
     // Hot core
     L.circle([lat, lon], {
       radius: radKm * 0.4,
       color: color, weight: 1, fillColor: color,
-      fillOpacity: 0.50, interactive: true
+      fillOpacity: 0.25, interactive: true
     }).bindPopup(
       `<div class="popup-title">☀️ Heatwave Zone</div>` +
       `<div class="popup-row"><span>Heat Index</span><span class="popup-val">${idx}/100</span></div>` +
@@ -790,21 +820,21 @@ function updateHeatLayer(fires) {
     L.circle([f.lat, f.lon], {
       radius: km * 1400,
       color: 'transparent', fillColor: c.fill,
-      fillOpacity: 0.25, interactive: false
+      fillOpacity: 0.10, interactive: false
     }).addTo(heatCircleLayer);
 
     // Mid ring
     L.circle([f.lat, f.lon], {
       radius: km * 700,
       color: 'transparent', fillColor: c.fill,
-      fillOpacity: 0.40, interactive: false
+      fillOpacity: 0.18, interactive: false
     }).addTo(heatCircleLayer);
 
     // Hot core
     L.circle([f.lat, f.lon], {
       radius: km * 300,
       color: 'transparent', fillColor: c.fill,
-      fillOpacity: 0.55, interactive: false
+      fillOpacity: 0.28, interactive: false
     }).addTo(heatCircleLayer);
   });
 }
@@ -849,11 +879,21 @@ function onContinentChange() {
   }
 }
 
-function onCountryChange() {
+function onCountryChange(skipFly = false) {
   const country = document.getElementById('countrySelect').value;
   if (!country) return;
+  selectedCountry = country;
   document.getElementById('cityInput').placeholder = `City or state in ${country}…`;
-  geocodeAndFly(country);
+  
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  if (analyzeBtn) analyzeBtn.textContent = `🛰️ Analyze ${country}`;
+  
+  if (!skipFly) {
+    geocodeAndFly(country);
+  }
+  
+  // Refresh data to show problems of selected country
+  refreshAll();
 }
 
 async function searchLocation() {

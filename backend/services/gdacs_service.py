@@ -134,7 +134,8 @@ DEMO_DISASTERS = [
 
 
 async def get_live_disasters(limit: int = 50) -> List[Dict]:
-    """Fetch live disasters from GDACS. Falls back to demo data."""
+    """Fetch live disasters from GDACS and include demo data."""
+    live_events = []
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(
@@ -146,11 +147,13 @@ async def get_live_disasters(limit: int = 50) -> List[Dict]:
             data = resp.json()
             events = data.get("features", [])
             if events:
-                return _parse_gdacs_geojson(events)
+                live_events = _parse_gdacs_geojson(events)
     except Exception as e:
-        print(f"[GDACS] API failed: {e}. Using demo data.")
+        print(f"[GDACS] API failed: {e}. Using demo data only.")
 
-    return DEMO_DISASTERS
+    # Always include demo data to ensure map is richly populated (as requested by user)
+    # Combine live events with demo events
+    return live_events + DEMO_DISASTERS
 
 
 def _parse_gdacs_geojson(features: list) -> List[Dict]:
