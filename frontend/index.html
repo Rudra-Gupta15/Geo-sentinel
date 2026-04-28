@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🌍 Earth Intelligence — Live Natural Hazard Monitor</title>
+  <meta name="description" content="Real-time global natural hazard monitoring: wildfires, floods, earthquakes, cyclones, landslides, heatwaves with AI-powered risk predictions." />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- App styles -->
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════
+     HEADER
+════════════════════════════════════════════════════ -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo-wrap">
+      <span class="logo-icon">🌍</span>
+      <div class="pulse-ring"></div>
+    </div>
+    <div>
+      <h1 class="app-title">Earth Intelligence</h1>
+      <p class="app-subtitle">Live Natural Hazard Monitor</p>
+    </div>
+  </div>
+
+  <nav class="tab-nav" id="tabNav">
+    <button class="tab-btn active" data-tab="live" id="tab-live">
+      <span class="tab-icon">📡</span> Live Monitor
+    </button>
+    <button class="tab-btn" data-tab="history" id="tab-history">
+      <span class="tab-icon">📅</span> History
+    </button>
+    <button class="tab-btn" data-tab="predict" id="tab-predict">
+      <span class="tab-icon">🔮</span> Predictions
+    </button>
+    <button class="tab-btn" data-tab="news" id="tab-news">
+      <span class="tab-icon">📰</span> News Feed
+    </button>
+  </nav>
+
+  <div class="header-right">
+    <!-- Location Search Bar -->
+    <div class="location-search" id="locationSearch">
+      <select id="continentSelect" class="loc-select" onchange="onContinentChange()">
+        <option value="">🌍 Continent</option>
+        <option value="Asia">🌏 Asia</option>
+        <option value="Europe">🌍 Europe</option>
+        <option value="North America">🌎 N. America</option>
+        <option value="South America">🌎 S. America</option>
+        <option value="Africa">🌍 Africa</option>
+        <option value="Oceania">🌏 Oceania</option>
+      </select>
+      <span class="loc-sep">›</span>
+      <select id="countrySelect" class="loc-select" disabled onchange="onCountryChange()">
+        <option value="">🏳️ Country</option>
+      </select>
+      <span class="loc-sep">›</span>
+      <input type="text" id="cityInput" class="loc-input" placeholder="State or city…" onkeydown="if(event.key==='Enter') searchLocation()" />
+      <button class="loc-search-btn" id="locSearchBtn" onclick="searchLocation()">🔍</button>
+    </div>
+
+    <div class="status-indicator" id="statusIndicator">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Connecting…</span>
+    </div>
+    <span class="last-updated" id="lastUpdated">–</span>
+  </div>
+</header>
+
+<!-- ════════════════════════════════════════════════════
+     HAZARD FILTER BAR
+════════════════════════════════════════════════════ -->
+<div class="filter-bar" id="filterBar">
+  <span class="filter-label">Layers:</span>
+  <button class="filter-btn active" data-hazard="fire"       id="flt-fire">🔥 Wildfire</button>
+  <button class="filter-btn active" data-hazard="flood"      id="flt-flood">🌊 Flood</button>
+  <button class="filter-btn active" data-hazard="earthquake" id="flt-earthquake">🏔️ Earthquake</button>
+  <button class="filter-btn active" data-hazard="cyclone"    id="flt-cyclone">🌀 Cyclone</button>
+  <button class="filter-btn active" data-hazard="landslide"  id="flt-landslide">⛰️ Landslide</button>
+  <button class="filter-btn active" data-hazard="heatwave"   id="flt-heatwave">☀️ Heatwave</button>
+  <button class="filter-btn active" data-hazard="drought"    id="flt-drought">🏜️ Drought</button>
+
+  <div class="filter-divider"></div>
+  <button class="map-style-btn" id="mapStyleBtn" onclick="toggleMapStyle()">🛰️ Satellite</button>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     MAIN LAYOUT
+════════════════════════════════════════════════════ -->
+<div class="app-layout">
+
+  <!-- ─── LEFT SIDEBAR ──────────────────────────────── -->
+  <aside class="sidebar">
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card" id="sc-fires">
+        <div class="stat-icon-wrap fire-glow">🔥</div>
+        <div class="stat-body">
+          <div class="stat-value" id="statFires">–</div>
+          <div class="stat-label">Active Fires</div>
+        </div>
+      </div>
+      <div class="stat-card" id="sc-disasters">
+        <div class="stat-icon-wrap quake-glow">⚠️</div>
+        <div class="stat-body">
+          <div class="stat-value" id="statDisasters">–</div>
+          <div class="stat-label">Live Events</div>
+        </div>
+      </div>
+      <div class="stat-card" id="sc-flood">
+        <div class="stat-icon-wrap flood-glow">🌊</div>
+        <div class="stat-body">
+          <div class="stat-value" id="statFlood">–</div>
+          <div class="stat-label">Flood Risk</div>
+        </div>
+      </div>
+      <div class="stat-card" id="sc-co2">
+        <div class="stat-icon-wrap air-glow">💨</div>
+        <div class="stat-body">
+          <div class="stat-value" id="statCO2">–</div>
+          <div class="stat-label">CO₂ Tons</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Weather Conditions -->
+    <div class="section-card weather-card">
+      <div class="section-header">🌡️ Weather Conditions <span class="wx-loc" id="wxLoc">India</span></div>
+      <div class="wx-grid">
+        <div class="wx-item">
+          <div class="wx-icon">🌡️</div>
+          <div class="wx-val" id="wxTemp">–</div>
+          <div class="wx-key">Now °C</div>
+        </div>
+        <div class="wx-item">
+          <div class="wx-icon">🔆</div>
+          <div class="wx-val" id="wxMaxTemp">–</div>
+          <div class="wx-key">Max °C</div>
+        </div>
+        <div class="wx-item">
+          <div class="wx-icon">💨</div>
+          <div class="wx-val" id="wxWind">–</div>
+          <div class="wx-key">Wind km/h</div>
+        </div>
+        <div class="wx-item">
+          <div class="wx-icon">🌧️</div>
+          <div class="wx-val" id="wxRain">–</div>
+          <div class="wx-key">Rain 7d mm</div>
+        </div>
+        <div class="wx-item">
+          <div class="wx-icon">☀️</div>
+          <div class="wx-val" id="wxHeatIdx">–</div>
+          <div class="wx-key">Heat Idx</div>
+        </div>
+        <div class="wx-item">
+          <div class="wx-icon">🏜️</div>
+          <div class="wx-val" id="wxDrought">–</div>
+          <div class="wx-key">Drought</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alert Level -->
+    <div class="alert-level-card" id="alertLevelCard">
+      <div class="al-left">
+        <span class="al-label">Global Alert Level</span>
+        <span class="al-badge" id="alertBadge">–</span>
+        <span class="al-meaning" id="alertMeaning"></span>
+      </div>
+      <div class="al-pulse" id="alertPulse"></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="section-card">
+      <div class="section-header">⚙️ Controls</div>
+      <label class="ctrl-label">Days of Data <span id="daysVal">7</span>d</label>
+      <input type="range" id="daysSlider" min="1" max="10" value="7" class="slider" oninput="document.getElementById('daysVal').textContent=this.value" />
+
+      <label class="ctrl-label">Search Radius <span id="radiusVal">500</span>km</label>
+      <input type="range" id="radiusSlider" min="100" max="2000" value="500" step="100" class="slider" oninput="document.getElementById('radiusVal').textContent=this.value" />
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeIndia()">🛰️ Analyze India</button>
+        <button class="btn btn-ghost" onclick="refreshAll()">↺ Refresh</button>
+      </div>
+    </div>
+
+
+  </aside>
+
+  <!-- ─── MAP ───────────────────────────────────────── -->
+  <main class="map-container">
+    <div id="map"></div>
+
+    <!-- History scrubber (shown only on History tab) -->
+    <div class="timeline-bar" id="timelineBar" style="display:none">
+      <span class="tl-label">📅 History Scrubber</span>
+      <input type="range" id="timelineSlider" min="0" max="30" value="0" class="tl-slider" oninput="scrubHistory(this.value)" />
+      <span class="tl-date" id="timelineDate">Today</span>
+      <button class="tl-play" id="playBtn" onclick="togglePlay()">▶ Play</button>
+    </div>
+
+    <!-- Map overlay for region panel -->
+    <div class="map-overlay" id="regionPanel" style="display:none">
+      <button class="close-btn" onclick="closeRegionPanel()">✕</button>
+      <h4 id="regionTitle">Region Analysis</h4>
+      <div id="regionContent"></div>
+    </div>
+
+    <!-- Map legend -->
+    <div class="map-legend" id="mapLegend">
+      <div class="legend-title">Hazard Intensity</div>
+      <div class="legend-item"><span class="legend-dot low"></span><span>Low — monitor</span></div>
+      <div class="legend-item"><span class="legend-dot med"></span><span>Moderate — caution</span></div>
+      <div class="legend-item"><span class="legend-dot high"></span><span>High — prepare</span></div>
+      <div class="legend-item"><span class="legend-dot critical"></span><span>Critical — act now</span></div>
+    </div>
+  </main>
+
+  <!-- ─── RIGHT PANEL ───────────────────────────────── -->
+  <aside class="right-panel">
+
+    <!-- TAB: LIVE — Live Alerts -->
+    <div class="panel-section" id="panel-live">
+      <div class="panel-title">🚨 Live Alerts</div>
+      <p class="panel-subtitle">Active global hazard events right now</p>
+
+      <div class="insight-box" id="insightBox">
+        <div class="insight-icon">🛰️</div>
+        <div class="insight-text" id="insightText">
+          Click <strong>Analyze India</strong> or tap any point on the map to get AI-powered environmental insights.
+        </div>
+      </div>
+
+      <div id="alertsList" class="alerts-list" style="flex:1;overflow-y:auto;">
+        <div class="loading-state"><span class="spinner"></span> Loading…</div>
+      </div>
+    </div>
+
+    <!-- TAB: HISTORY -->
+    <div class="panel-section hidden" id="panel-history">
+      <div class="panel-title">📅 Event History</div>
+      <div class="hfilter-row">
+        <select id="historyTypeFilter" class="select-input" onchange="loadHistory()">
+          <option value="">All Types</option>
+          <option value="fire">🔥 Wildfire</option>
+          <option value="flood">🌊 Flood</option>
+          <option value="earthquake">🏔️ Earthquake</option>
+          <option value="cyclone">🌀 Cyclone</option>
+          <option value="landslide">⛰️ Landslide</option>
+          <option value="drought">☀️ Drought</option>
+        </select>
+        <select id="historyDaysFilter" class="select-input" onchange="loadHistory()">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+      <canvas id="historyChart" class="chart-canvas"></canvas>
+      <div id="historyList" class="event-list">
+        <div class="loading-state"><span class="spinner"></span> Loading history…</div>
+      </div>
+    </div>
+
+    <!-- TAB: PREDICT -->
+    <div class="panel-section hidden" id="panel-predict">
+      <div class="panel-title">🔮 Risk Predictions</div>
+      <p class="panel-subtitle">Click any location on the map to predict hazard risks</p>
+
+      <div class="predict-location" id="predictLocation">
+        <span>📍</span>
+        <span id="predictCoords">India Center (20.6°N, 79.0°E)</span>
+      </div>
+
+      <div class="risk-gauges" id="riskGauges">
+        <div class="loading-state"><span class="spinner"></span> Loading predictions…</div>
+      </div>
+
+      <canvas id="radarChart" class="chart-canvas radar-chart"></canvas>
+    </div>
+
+    <!-- TAB: NEWS -->
+    <div class="panel-section hidden" id="panel-news">
+      <div class="panel-title">📰 Disaster News</div>
+      <div class="news-filter-row">
+        <button class="news-filter-btn active" data-ntype="all" onclick="filterNews('all', this)">All</button>
+        <button class="news-filter-btn" data-ntype="wildfire" onclick="filterNews('wildfire', this)">🔥</button>
+        <button class="news-filter-btn" data-ntype="flood" onclick="filterNews('flood', this)">🌊</button>
+        <button class="news-filter-btn" data-ntype="cyclone" onclick="filterNews('cyclone', this)">🌀</button>
+        <button class="news-filter-btn" data-ntype="earthquake" onclick="filterNews('earthquake', this)">🏔️</button>
+        <button class="news-filter-btn" data-ntype="landslide" onclick="filterNews('landslide', this)">⛰️</button>
+        <button class="news-filter-btn" data-ntype="heatwave" onclick="filterNews('heatwave', this)">☀️</button>
+      </div>
+      <div id="newsList" class="news-list">
+        <div class="loading-state"><span class="spinner"></span> Fetching news…</div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     RUD AI — Floating Action Button
+════════════════════════════════════════════════════ -->
+<button class="rud-ai-fab" id="rudAiFab" onclick="toggleRudAI()" title="Open RUD AI">
+  <span class="rud-ai-fab-icon">✦</span>
+  <span class="rud-ai-fab-label">RUD AI</span>
+  <span class="rud-ai-fab-ping"></span>
+</button>
+
+<!-- RUD AI Chat Popup -->
+<div class="rud-ai-popup" id="rudAiPopup">
+  <div class="rud-ai-popup-header">
+    <div class="rud-ai-popup-title">
+      <span class="rud-ai-popup-icon">✦</span>
+      <span>RUD AI</span>
+      <span class="rud-ai-badge">Earth Copilot</span>
+    </div>
+    <div class="rud-ai-popup-actions">
+      <button class="icon-btn" onclick="clearChat()" title="Clear chat">🗑</button>
+      <button class="icon-btn" onclick="toggleRudAI()" title="Close">✕</button>
+    </div>
+  </div>
+
+  <div class="rud-ai-insight">
+    <div class="insight-icon">✦</div>
+    <div class="insight-text" id="insightText2">
+      Click <strong>Analyze India</strong> or tap any map point for AI-powered environmental insights.
+    </div>
+  </div>
+
+  <div class="chat-messages" id="chatMessages">
+    <div class="msg assistant">
+      <div class="msg-bubble">
+        👋 Hi! I'm <strong>RUD AI</strong> — your Earth Intelligence Copilot. Ask me about wildfires, cyclones, floods, landslides, or any environmental crisis.<br><br>
+        <em>Try: "What's the flood risk in Assam right now?"</em>
+      </div>
+    </div>
+  </div>
+
+  <div class="chat-input-row">
+    <input type="text" id="chatInput" class="chat-input"
+      placeholder="Ask RUD AI about any hazard…"
+      onkeydown="if(event.key==='Enter') sendMessage()" />
+    <button class="send-btn" onclick="sendMessage()">➤</button>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- leaflet.heat via jsdelivr (unpkg version is broken/missing) -->
+  <script src="https://cdn.jsdelivr.net/gh/Leaflet/Leaflet.heat@gh-pages/dist/leaflet-heat.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
